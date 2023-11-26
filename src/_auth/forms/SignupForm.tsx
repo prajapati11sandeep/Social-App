@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,10 +17,23 @@ import { Input } from "@/components/ui/input";
 import { SignupValidation } from "@/lib/validations";
 import Loader from "@/components/shared/Loader";
 
-import { createUserAccount } from "@/lib/appwrite/api";
+import { useToast } from "@/components/ui/use-toast";
+
+import {
+	useCreateUserAccount,
+	useSigninAccount,
+} from "@/lib/react-query/QueriesAndMutations";
+import { useUserContext } from "@/context/AuthContext";
 
 const SignupForm = () => {
-	const isLoading = false;
+	const { toast } = useToast();
+	const { checkAuthUser } = useUserContext();
+	const navigate = useNavigate();
+
+	const { mutateAsync: createUserAccount, isPending: isCreatingAccount } =
+		useCreateUserAccount();
+
+	const { mutateAsync: signInAccount } = useSigninAccount();
 
 	// 1. Define your form.
 	const form = useForm<z.infer<typeof SignupValidation>>({
@@ -35,10 +48,34 @@ const SignupForm = () => {
 
 	// 2. Define a submit handler.
 	async function onSubmit(values: z.infer<typeof SignupValidation>) {
-		console.log(values);
-
 		const newUser = await createUserAccount(values);
-		console.log(newUser);
+
+		if (!newUser) {
+			return toast({
+				title: "Signup failed please try again",
+			});
+		}
+
+		const session = await signInAccount({
+			email: values.email,
+			password: values.password,
+		});
+
+		if (!session) {
+			return toast({
+				title: "Sign in failed. Please try again.",
+			});
+		}
+
+		const isLoggedIn = await checkAuthUser();
+		if (isLoggedIn) {
+			form.reset();
+			navigate("/");
+		} else {
+			return toast({
+				title: "Signup failed please try again.",
+			});
+		}
 	}
 
 	return (
@@ -112,9 +149,9 @@ const SignupForm = () => {
 						<Button
 							className="shad-button_primary"
 							type="submit"
-							disabled={isLoading}
+							disabled={isCreatingAccount}
 						>
-							{isLoading ? (
+							{isCreatingAccount ? (
 								<div className="flex-center gap-2">
 									<Loader />
 									Loading...
